@@ -1,0 +1,59 @@
+package main
+
+import (
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/igorfarias30/social/internal/store"
+)
+
+type application struct {
+	config config
+	store  store.Storage
+}
+
+type config struct {
+	address  string
+	dbConfig dbConfig
+}
+
+type dbConfig struct {
+	address            string
+	maxOpenConnections int
+	maxIdleConnections int
+	maxIdleTime        string
+}
+
+func (app *application) mount() *chi.Mux {
+	r := chi.NewRouter()
+
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	r.Use(middleware.Timeout(time.Second * 60))
+
+	r.Route("/v1", func(r chi.Router) {
+		r.Get("/health", app.healthCheckHandler)
+	})
+
+	return r
+}
+
+func (app *application) run(mux *chi.Mux) error {
+
+	server := &http.Server{
+		Addr:         app.config.address,
+		Handler:      mux,
+		WriteTimeout: time.Second * 30,
+		ReadTimeout:  time.Second * 10,
+		IdleTimeout:  time.Minute,
+	}
+
+	log.Printf("Server has started at port %s", app.config.address)
+	return server.ListenAndServe()
+}
